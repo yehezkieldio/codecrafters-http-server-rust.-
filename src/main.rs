@@ -17,7 +17,7 @@ impl HTTPStatus {
         match self {
             HTTPStatus::Ok(_, content_type) => content_type.clone(),
             HTTPStatus::NotFound => "text/plain".to_string(),
-            HTTPStatus::Created => "text/plain".to_string(),
+            HTTPStatus::Created => "application/octet-stream".to_string(),
         }
     }
     pub fn to_string(&self) -> String {
@@ -132,6 +132,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             .collect::<Vec<&str>>()
                                             .join("\n");
                                         println!("File content: {}", file_content);
+
+                                        // handle null byte and remove it
+                                        let file_content = file_content.replace("\u{0}", "");
 
                                         match File::create(file_path).await {
                                             Ok(mut file) => {
