@@ -4,15 +4,35 @@ use std::{
 };
 
 enum HTTPStatus {
-    Ok,
+    Ok(String, String),
     NotFound,
 }
 
 impl HTTPStatus {
+    fn content_type(&self) -> String {
+        match self {
+            HTTPStatus::Ok(_, content_type) => content_type.to_string(),
+            HTTPStatus::NotFound => "text/plain".to_string(),
+        }
+    }
     fn to_string(&self) -> String {
         match self {
-            HTTPStatus::Ok => "HTTP/1.1 200 OK\r\n\r\n".to_string(),
-            HTTPStatus::NotFound => "HTTP/1.1 404 Not Found\r\n\r\n".to_string(),
+            HTTPStatus::Ok(body, _) => {
+                format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n{}",
+                    self.content_type(),
+                    body.len(),
+                    body
+                )
+            }
+            HTTPStatus::NotFound => {
+                format!(
+                    "HTTP/1.1 404 NOT FOUND\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n{}",
+                    self.content_type(),
+                    0,
+                    ""
+                )
+            }
         }
     }
 }
@@ -36,16 +56,37 @@ fn main() {
                         let request = String::from_utf8_lossy(&buffer[..]);
                         println!("Received request: {}", request);
 
-                        let response_200 = HTTPStatus::Ok.to_string();
-                        let response_404 = HTTPStatus::NotFound.to_string();
-
                         let response = match request.split_whitespace().nth(1) {
-                            Some("/") => response_200,
-                            _ => response_404,
+                            Some("/") => HTTPStatus::Ok(
+                                "Hello, world!".to_string(),
+                                "text/plain".to_string(),
+                            ),
+                            Some(path) if path.starts_with("/echo/") => {
+                                let echo_string = &path[6..];
+
+                                println!("Echoing: {}", echo_string);
+                                HTTPStatus::Ok(echo_string.to_string(), "text/plain".to_string())
+                            }
+                            _ => HTTPStatus::NotFound,
                         };
 
-                        tcp_stream.write(response.as_bytes()).unwrap();
-                        tcp_stream.flush().unwrap();
+                        match tcp_stream.write(response.to_string().as_bytes()) {
+                            Ok(_) => {
+                                println!("Response sent!");
+                            }
+                            Err(e) => {
+                                println!("Failed to send response: {}", e);
+                            }
+                        }
+
+                        match tcp_stream.flush() {
+                            Ok(_) => {
+                                println!("Flushed the stream!");
+                            }
+                            Err(e) => {
+                                println!("Failed to flush the stream: {}", e);
+                            }
+                        }
                     }
                     Err(e) => {
                         println!("Failed to receive data: {}", e);
