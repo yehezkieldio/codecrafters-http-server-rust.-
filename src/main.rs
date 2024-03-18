@@ -38,9 +38,30 @@ impl HTTPStatus {
     }
 }
 
+fn discover_files_from_directory(directory: &str) -> Vec<String> {
+    let paths = std::fs::read_dir(directory).unwrap();
+    let mut files = vec![];
+    for path in paths {
+        let path = path.unwrap().path();
+        if path.is_file() {
+            files.push(path.file_name().unwrap().to_str().unwrap().to_string());
+        }
+    }
+    files
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     println!("Logs from your program will appear here!");
+    let prestart_directory = std::env::args().nth(2);
+    if prestart_directory.is_some() {
+        let prestart_directory_value = match prestart_directory {
+            Some(directory) => directory,
+            None => ".".to_string(),
+        };
+        let files = discover_files_from_directory(&prestart_directory_value);
+        println!("Discovered files from provided directory flag: {:?}", files);
+    }
 
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
     loop {
@@ -48,6 +69,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tokio::spawn(async move {
             println!("Connection established!");
             let mut buffer = [0; 1024];
+            let directory_flag = std::env::args().nth(2);
 
             match tcp_stream.read(&mut buffer) {
                 Ok(0) => {
@@ -78,6 +100,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                             println!("Echoing: {}", echo_string);
                             HTTPStatus::Ok(echo_string.to_string(), "text/plain".to_string())
+                        }
+                        Some(path) if path.starts_with("/files/") => {
+                            let file_name = &path[7..];
+                            match directory_flag {
+                                Some(directory) => {
+                                    let file_path = format!("{}/{}", directory, file_name);
+                                    println!("File path: {}", file_path);
+                                    match tokio::fs::read_to_string(file_path).await {
+                                        Ok(file_content) => HTTPStatus::Ok(
+                                            file_content,
+                                            "application/octet-stream".to_string(),
+                                        ),
+                                        Err(_) => HTTPStatus::NotFound,
+                                    }
+                                }
+                                None => HTTPStatus::NotFound,
+                            }
                         }
                         _ => HTTPStatus::NotFound,
                     };
