@@ -3,19 +3,19 @@ use std::{
     net::TcpListener,
 };
 
-enum HTTPStatus {
+pub enum HTTPStatus {
     Ok(String, String),
     NotFound,
 }
 
 impl HTTPStatus {
-    fn content_type(&self) -> String {
+    pub fn content_type(&self) -> String {
         match self {
-            HTTPStatus::Ok(_, content_type) => content_type.to_string(),
+            HTTPStatus::Ok(_, content_type) => content_type.clone(),
             HTTPStatus::NotFound => "text/plain".to_string(),
         }
     }
-    fn to_string(&self) -> String {
+    pub fn to_string(&self) -> String {
         match self {
             HTTPStatus::Ok(body, _) => {
                 format!(
@@ -61,6 +61,17 @@ fn main() {
                                 "Hello, world!".to_string(),
                                 "text/plain".to_string(),
                             ),
+                            Some("/user-agent") => {
+                                let user_agent = request
+                                    .split("\r\n")
+                                    .find(|line| line.starts_with("User-Agent"))
+                                    .map(|line| line.split(": ").nth(1).unwrap_or("Unknown"))
+                                    .unwrap_or("Unknown")
+                                    .to_string();
+
+                                println!("User-Agent: {}", user_agent);
+                                HTTPStatus::Ok(user_agent, "text/plain".to_string())
+                            }
                             Some(path) if path.starts_with("/echo/") => {
                                 let echo_string = &path[6..];
 
@@ -97,5 +108,22 @@ fn main() {
                 println!("error: {}", e);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_content_type_ok() {
+        let status = HTTPStatus::Ok("Hello, world!".to_string(), "text/plain".to_string());
+        assert_eq!(status.content_type(), "text/plain");
+    }
+
+    #[test]
+    fn test_content_type_not_found() {
+        let status = HTTPStatus::NotFound;
+        assert_eq!(status.content_type(), "text/plain");
     }
 }
