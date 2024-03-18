@@ -4,8 +4,6 @@ use std::{
     net::TcpListener,
 };
 
-use tokio::{fs::File, io::AsyncWriteExt};
-
 pub enum HTTPStatus {
     Ok(String, String),
     NotFound,
@@ -133,28 +131,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                                             .join("\n");
                                         println!("File content: {}", file_content);
 
-                                        // handle null byte and remove it
-                                        let file_content = file_content.replace("\u{0}", "");
+                                        let cleaned_content = file_content.replace("\x00", "");
+                                        println!("Cleaned file content: {}", cleaned_content);
 
-                                        match File::create(file_path).await {
-                                            Ok(mut file) => {
-                                                match file.write_all(file_content.as_bytes()).await
-                                                {
-                                                    Ok(_) => {
-                                                        println!("File content written!");
-                                                        HTTPStatus::Created
-                                                    }
-                                                    Err(e) => {
-                                                        println!(
-                                                            "Failed to write file content: {}",
-                                                            e
-                                                        );
-                                                        HTTPStatus::NotFound
-                                                    }
-                                                }
+                                        match tokio::fs::write(&file_path, cleaned_content).await {
+                                            Ok(_) => {
+                                                println!("File content written!");
+                                                HTTPStatus::Created
                                             }
                                             Err(e) => {
-                                                println!("Failed to create file: {}", e);
+                                                println!("Failed to write file content: {}", e);
                                                 HTTPStatus::NotFound
                                             }
                                         }
